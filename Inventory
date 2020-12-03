@@ -1,0 +1,281 @@
+/*
+ 
+Система инвентаря
+Под все создано 60 слотов, из них 47 - оружие
+Для добавления новых предметов - добавьте строчки с вашими названиями в OnGameModeInit
+Для того, чтобы ваши предметы заработали - редактируйте функцию switchItem, и измените действие в диалоге ID 22
+ 
+Все предметы, лежащие в инвентаре - полностью сохраняются в директорию inventory/%s.ini, где '%s' - ник игрока
+Максимум задействованных слотов для игрока - 20
+ 
+ 
+Так же спасибо Games & Alex009
+*/
+ 
+#include <a_samp>
+#include mxINI
+ 
+new WeaponNames[47][] = {
+"Unarmed","Brass Knuckless","Golf Club","Night Stick","Knife","Basketball Bat","Shovel","Pool Cue",
+"Katana","Chainsaw","Purple Dildo","White Dildo","Long White Dildo","White Dildo 2","Flowers","Cane",
+"Grenades","Tear Gas","Molotovs","Missle1","Missle2","Missle3","Pistol","Silenced Pistol","Desert Eagle","Shotgun",
+"Sawn Off Shotgun","Combat Shotgun","Micro UZI","MP5","AK-47","M4","Tec9","Rifle","Sniper Rifle","RPG",
+"Rocket Launcher","Flame Thrower","Minigun","Sachet Chargers","Detonator","Spry Paint","Fire Extinguer",
+"Camera","Nightvision Goggles","Thermal Goggles","Parachute"};
+ 
+#define dcmd(%1,%2,%3) if ((strcmp((%3)[1], #%1, true, (%2)) == 0) && ((((%3)[(%2) + 1] == 0) && (dcmd_%1(playerid, "")))||(((%3)[(%2) + 1] == 32) && (dcmd_%1(playerid, (%3)[(%2) + 2]))))) return 1
+ 
+#define MAX_ITEMS 60
+#define MAX_PLAYER_ITEM 20
+ 
+new item[MAX_PLAYERS][MAX_ITEMS];
+new used[MAX_PLAYERS];
+new np[MAX_PLAYERS][MAX_ITEMS];
+new npname[MAX_ITEMS][100];
+new ida[MAX_ITEMS];
+new loading[MAX_ITEMS];
+ 
+main()
+{
+    print("\n----------------------------------");
+    print(" Dynamic Inventory system by Seregamil");
+    print("----------------------------------\n");
+}
+ 
+ 
+public OnGameModeInit()
+{
+    for(new i;i!=47;i++) format(npname[i],100,"%s",WeaponNames[i])/*,printf("NAME: %s | ID: %d",WeaponNames[i],i)*/;
+    return 1;
+}
+ 
+addItem(playerid,id,name[],value)
+{
+    if(GetPVarInt(playerid,name) != 0) SetPVarInt(playerid,name,GetPVarInt(playerid,name)+value);
+    else SetPVarInt(playerid,name,value);
+    new str[128];
+    format(str,128,"{a3ff00}%s {ffffff}было обновлено в инвентаре. Стало {a3ff00}[%d]",name,GetPVarInt(playerid,name));
+    SendClientMessage(playerid,-1,str);
+    item[playerid][id]+=value;
+    used[playerid]++;
+    np[playerid][id] = GetPVarInt(playerid,name);
+}
+ 
+removeItem(playerid,name[],id)
+{
+    SetPVarInt(playerid,name,0);
+    new str[128];
+    format(str,128,"{a3ff00}%s{ffffff} было удалено из инвентаря",npname[id]);
+    SendClientMessage(playerid,-1,str);
+    item[playerid][id]=0;
+    used[playerid]--;
+    np[playerid][id] = 0;
+}
+ 
+infoAllItem(playerid)
+{
+    new str[300];
+    for(new q;q!=MAX_ITEMS;q++) ida[q]=0;
+    for(new i;i!=MAX_ITEMS;i++)
+    {
+        if(item[playerid][i]!=0)
+        {
+            format(str,sizeof(str),"{ffffff}%s%s | {a3ff00}%d\n",str, npname[i],np[playerid][i]);
+            ida[i] = 1;
+        }
+    }
+    ShowPlayerDialog(playerid,15,DIALOG_STYLE_LIST,"  ",str,"Okay","");
+    return 1;
+}
+ 
+funcItem(playerid,id)
+{
+    new name[24];
+    GetPlayerName(playerid,name,24);
+    new str1[100];
+    format(str1,100,"{a3ff00}]%s[ {ffffff}Предмет {a3ff00}[%s {ffffff}| {a3ff00}%d]",name,npname[id],np[playerid][id]);
+    ShowPlayerDialog(playerid,22,DIALOG_STYLE_LIST,str1,"Использовать\nПередать\nВыбросить","Выбор","Отмена");
+    SetPVarInt(playerid,"Clicked",id);
+}
+ 
+public OnPlayerConnect(playerid)
+{
+    for(new x;x!=MAX_ITEMS;x++) item[playerid][x] = 0,np[playerid][x] = 0;
+    used[playerid] = 0;
+    loadInt(playerid);
+    return 1;
+}
+ 
+loadInt(playerid)
+{
+    for(new q;q!=MAX_ITEMS;q++) loading[q] = 0;
+    new name[24];
+    GetPlayerName(playerid,name,24);
+    new str[100];
+    format(str,100,"inventory/%s.ini",name);
+    if(!fexist(str))
+    {
+        new file = ini_createFile(str);
+        if(file<0) ini_openFile(str);
+        for(new x;x!=MAX_ITEMS;x++)
+        {
+            new str2[100];
+            format(str2,100,"Inv%d",x);
+            ini_setInteger(playerid,str2,0);
+        }
+        ini_closeFile(file);
+    }
+    else
+    {
+        new file = ini_openFile(str);
+        for(new x;x!=MAX_ITEMS;x++)
+        {
+            new str2[100];
+            format(str2,100,"Inv%d",x);
+            ini_getInteger(playerid,str2,loading[x]);
+            if(loading[x] != 0) addItem(playerid,x,npname[x],loading[x]);
+        }
+        ini_closeFile(file);
+    }
+}
+ 
+public OnPlayerDisconnect(playerid, reason)
+{
+    saveInt(playerid);
+    for(new x;x!=MAX_ITEMS;x++) item[playerid][x] = 0,np[playerid][x] = 0;
+    used[playerid] = 0;
+    return 1;
+}
+ 
+saveInt(playerid)
+{
+    new name[24];
+    GetPlayerName(playerid,name,24);
+    new str[100];
+    format(str,100,"inventory/%s.ini",name);
+    if(fexist(str))
+    {
+        new file = ini_openFile(str);
+        for(new x;x!=MAX_ITEMS;x++)
+        {
+            new str2[100];
+            format(str2,100,"Inv%d",x);
+            ini_setInteger(playerid,str2,item[playerid][x]);
+            removeItem(playerid,npname[x],x);
+        }
+        ini_closeFile(file);
+    }
+}
+ 
+public OnPlayerCommandText(playerid, cmdtext[])
+{
+    dcmd(add,3,cmdtext);
+    dcmd(info,4,cmdtext);
+    return 0;
+}
+ 
+dcmd_add(playerid,params[])
+{
+    #pragma unused params
+    if(used[playerid] == MAX_PLAYER_ITEM) return SendClientMessage(playerid,-1,"MAX");
+    if(GetPlayerWeapon(playerid)!=0) addItem(playerid,GetPlayerWeapon(playerid),WeaponNames[GetPlayerWeapon(playerid)],GetPlayerAmmo(playerid));
+    RemovePlayerWeapon(playerid, GetPlayerWeapon(playerid));
+    return 1;
+}
+ 
+RemovePlayerWeapon(playerid, weaponid)
+{
+    if(!IsPlayerConnected(playerid) || weaponid < 0 || weaponid > 50) return;
+    new saveweapon[13], saveammo[13];
+    for(new slot = 0; slot < 13; slot++) GetPlayerWeaponData(playerid, slot, saveweapon[slot], saveammo[slot]);
+    ResetPlayerWeapons(playerid);
+    for(new slot; slot < 13; slot++)
+    {
+        if(saveweapon[slot] == weaponid || saveammo[slot] == 0) continue;
+        GivePlayerWeapon(playerid, saveweapon[slot], saveammo[slot]);
+    }
+    GivePlayerWeapon(playerid, 0, 1);
+}
+ 
+dcmd_info(playerid,params[])
+{
+    #pragma unused params
+    infoAllItem(playerid);
+    return 1;
+}
+ 
+public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
+{
+    if(dialogid == 15)
+    {
+        if(response)
+        {
+            new listid = 0;
+            for(new i;i!=MAX_ITEMS;i++)
+            {
+                if(ida[i] == 1)
+                {
+                    if(item[playerid][i] != 0)
+                    {
+                        if(listitem!=listid) listid++;
+                        else
+                        {
+                            funcItem(playerid,i);
+                            for(new x;x!=MAX_ITEMS;x++) ida[x]=0;
+                            break;
+                        }
+                    }
+                }
+            }
+            return true;
+        }
+    }
+    if(dialogid == 22)
+    {
+        if(!response) return infoAllItem(playerid);
+        if(response)
+        {
+            if(listitem == 0) 
+            {
+                if(switchItem(GetPVarInt(playerid,"Clicked")) == 0)
+                {
+                    GivePlayerWeapon(playerid,GetPVarInt(playerid,"Clicked"),item[playerid][GetPVarInt(playerid,"Clicked")]);
+                    removeItem(playerid,npname[GetPVarInt(playerid,"Clicked")],GetPVarInt(playerid,"Clicked"));
+                    SendClientMessage(playerid,-1,"Вы начали использовать предмет");
+                }
+            }
+            if(listitem == 1) ShowPlayerDialog(playerid,23,DIALOG_STYLE_INPUT,"  ","Введите ID игрока, которому хотите передать данный предмет","Ок","Назад");
+            if(listitem == 2) removeItem(playerid,npname[GetPVarInt(playerid,"Clicked")],GetPVarInt(playerid,"Clicked"));
+        }
+        return true;
+    }
+    if(dialogid == 23)
+    {
+        if(!response) return infoAllItem(playerid);
+        if(response)
+        {
+            new id = strval(inputtext);
+            if(!IsPlayerConnected(id)) return SendClientMessage(playerid,-1,"Данный игрок отсутствует на нашем сервере");
+            if(id == playerid) return SendClientMessage(playerid,-1,"Чувак, это ты");
+            if(used[id] == MAX_PLAYER_ITEM) return SendClientMessage(playerid,-1,"У этого игрока инвентарь полон");
+            addItem(id,GetPVarInt(playerid,"Clicked"),npname[GetPVarInt(playerid,"Clicked")],np[playerid][GetPVarInt(playerid,"Clicked")]);
+            new str[256],name[24];
+            GetPlayerName(playerid,name,24);
+            format(str,256,"{ffffff}Игрок {a3ff00}%s {ffffff}передал вам предмет {a3ff00}%s [%d]",name,npname[GetPVarInt(playerid,"Clicked")],np[playerid][GetPVarInt(playerid,"Clicked")]);
+            ShowPlayerDialog(id,24,DIALOG_STYLE_MSGBOX,"  ",str,"Ок","");
+            removeItem(playerid,npname[GetPVarInt(playerid,"Clicked")],GetPVarInt(playerid,"Clicked"));
+        }
+        return true;
+    }
+    return 1;
+}
+ 
+switchItem(id)
+{
+    #define WEAPON_ITEM 0
+    switch(id)
+    {
+        case 0..46: return WEAPON_ITEM;
+    }
+    return -1;
+}
